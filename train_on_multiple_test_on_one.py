@@ -8,16 +8,21 @@ import utils
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import re
 
 sns.set()
 logger = utils.config_logger(os.path.basename(__file__)[:-3])
 
 # constants
 file_path = '../putemg-downloader/Data-HDF5'
-trial_name = 'emg_gestures-03-repeats_long-2018-05-11-11-05-00-695'
-filtered_file = '/filtered-03-repeats_long-2018-05-11-11-05-00-695'
-users_train_list = ['03', '04', '05', '07']
+num_of_users = 44
+
+users_train_list = utils.get_users_list_from_dir(file_path)
 users_test_list = ['06']
+users_train_list = [f for f in users_train_list if f not in users_test_list]
+assert int(len(users_train_list)) + int(len(users_test_list)) == num_of_users, 'Wrong Users Number'
+logger.debug(f'User Train List:\n{users_train_list}')
+logger.debug(f'User Test List:\n{users_test_list}')
 
 # prepare train user filenames
 user_trains = [f'emg_gestures-{user}-repeats_long' for user in users_train_list]
@@ -32,7 +37,7 @@ y_train = np.array([])
 for train_file in train_user_files:
     logger.info(f'Processing {train_file}')
     X_train, y_train_current = utils.prepare_X_y(train_file)
-    rf_model.n_estimators += 10
+    rf_model.n_estimators += 1
     logger.debug(f'rf estimators {rf_model.n_estimators}')
     logger.info(f'Fitting {train_file}')
     rf_model.fit(X_train, y_train_current)
