@@ -6,19 +6,19 @@ import pandas as pd
 import re
 import errno
 
-cols_to_drop = ['TRAJ_1', 'type', 'subject', 'trajectory', 'date_time', 'TRAJ_GT_NO_FILTER', 'VIDEO_STAMP']
-full_user_list = ['03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '18',
+COLS_TO_DROP = ['TRAJ_1', 'type', 'subject', 'trajectory', 'date_time', 'TRAJ_GT_NO_FILTER', 'VIDEO_STAMP']
+FULL_USER_LIST = ['03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '18',
                   '19', '20', '22', '23', '24', '25', '26', '27', '29', '30', '31', '33', '34', '35', '36', '38',
                   '39', '42', '43', '45', '46', '47', '48', '49', '50', '51', '53', '54']
-full_traj_list = ['sequential', 'repeats_long', 'repeats_short']
-file_path = '../putemg-downloader/Data-HDF5'
+FULL_TRAJ_LIST = ['sequential', 'repeats_long', 'repeats_short']
+HDF_FILES_DIR = '../putemg-downloader/Data-HDF5'
+FEATURES_DATAFRAMES_DIR = 'features_dataframes'
 
-
-def config_logger(name='default'):
+def config_logger(name='default', level=logging.DEBUG):
     # config logger
     log_format = '%(created)f:%(levelname)s:%(name)s:%(module)s:%(message)s'
     formatter = logging.Formatter(log_format)
-    logging.basicConfig(level=logging.DEBUG,
+    logging.basicConfig(level=level,
                         format=log_format,
                         filename=f'./log/{time.ctime()}_{name}.log',
                         filemode='w')
@@ -30,15 +30,16 @@ def config_logger(name='default'):
     return created_logger
 
 
-def prepare_X_y(data_file: str):
+def prepare_X_y(data_file: str, target='TRAJ_GT', drop_cols=True):
     # read dataframe from file
     df = pd.read_hdf(data_file)
     # drop irrelevant columns
-    df.drop(cols_to_drop, axis=1, inplace=True)
+    if drop_cols:
+        df.drop(COLS_TO_DROP, axis=1, inplace=True)
     # remove "idle" and "relax"
-    df = df[df.TRAJ_GT > 0]
+    df = df[df[target] > 0]
     X = df.iloc[:, 0:24].to_numpy()
-    y = df.TRAJ_GT
+    y = df[target]
     del df
     return X, y
 
@@ -73,9 +74,9 @@ def get_users_list_from_dir(dir_path: str):
 
 def get_traj_for_user(dir_path: str, traj: str, user: str):
     assert type(dir_path) == str, f'Got {dir_path} instead of string'
-    assert traj in full_traj_list, f'traj argument should be one of sequential,' \
+    assert traj in FULL_TRAJ_LIST, f'traj argument should be one of sequential,' \
                                    f' repeats-long or repeats-short - got {traj}'
-    assert user in full_user_list
+    assert user in FULL_USER_LIST
     if not os.path.isdir(dir_path):
         print('{:s} is not a valid folder'.format(dir_path))
         exit(1)
@@ -91,7 +92,7 @@ def get_traj_for_user(dir_path: str, traj: str, user: str):
 def read_trial(trial: str) -> pd.DataFrame:
     assert type(trial) == str, f'Got bad argument type - {type(trial)}'
     assert trial, 'Got an empty trial name'
-    filename_trial = os.path.join(file_path, trial)
+    filename_trial = os.path.join(HDF_FILES_DIR, trial)
     assert os.path.exists(filename_trial), f'filename {filename_trial} does not exist'
     record = pd.read_hdf(filename_trial)
     return record

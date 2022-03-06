@@ -8,7 +8,7 @@ import utils
 
 
 def main(args):
-    logger = utils.config_logger(os.path.basename(__file__)[:-3])
+    logger = utils.config_logger(os.path.basename(__file__)[:-3], level=logging.INFO)
 
     train_name, test_name = utils.get_traj_for_user(args.file_path, args.traj, args.user)
 
@@ -42,9 +42,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-fp', '--file_path', type=str, help='Path to experiments directory',
                         default='../putemg-downloader/Data-HDF5')
-    parser.add_argument('-t', '--traj', type=str, help='Trajectory type', choices=utils.full_traj_list,
+    parser.add_argument('-t', '--traj', type=str, help='Trajectory type', choices=utils.FULL_TRAJ_LIST,
                         default='repeats_long')
-    parser.add_argument('-u', '--user', type=str, help='Two digit identifier', choices=utils.full_user_list,
+    parser.add_argument('-u', '--user', type=str, help='Two digit identifier', choices=utils.FULL_USER_LIST,
                         required=True)
     args = parser.parse_args()
     main(args)

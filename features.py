@@ -1,5 +1,8 @@
+import logging
+
 from sklearn import metrics
 from sklearn.ensemble import RandomForestClassifier
+import argparse
 
 import biolab_utilities
 # import pyeeg
@@ -10,18 +13,7 @@ import numpy as np
 import utils
 from tqdm import tqdm
 
-FEATURES_DATAFRAMES_DIR = 'features_dataframes'
-
-logger = utils.config_logger(os.path.basename(__file__)[:-3])
-
-
-# # train file
-# trial_train = 'emg_gestures-03-repeats_long-2018-05-11-11-05-00-695.hdf5'
-# # test file
-# trial_test = 'emg_gestures-03-repeats_long-2018-06-14-12-32-53-659.hdf5'
-#
-# record_train = utils.read_trial(trial_train)
-# record_test = utils.read_trial(trial_test)
+logger = utils.config_logger(os.path.basename(__file__)[:-3], level=logging.INFO)
 
 
 # calculate features
@@ -60,6 +52,11 @@ def feature_last(series, window, step):
     return pd.Series(data=windows_strided[::, -1], index=series.index[indexes])
 
 
+def feature_butterworth(series, window, step):
+    """Butterworth Filter"""
+    windows_strided, indexes = biolab_utilities.moving_window_stride(series.values, window, step)
+
+
 def calculate_feature_dataframe(record: pd.DataFrame) -> pd.DataFrame:
     calculated_features_df = pd.DataFrame()
     pbar = tqdm(record.columns[0:24])
@@ -87,31 +84,46 @@ def calculate_feature_dataframe(record: pd.DataFrame) -> pd.DataFrame:
 #     features_df_test.to_hdf(os.path.join(FEATURES_DATAFRAMES_DIR, 'features_' + trial_test),
 #                             key='features_df_test', mode='w')
 #     del trial_train, trial_test, record_train, record_test, features_df_train, features_df_test
+def between_days_same_user_for_all_users():
+    users_pbar = tqdm(utils.FULL_USER_LIST)
+    for user in users_pbar:
+        users_pbar.set_description("Fitting using features for user %s" % user)
+        between_days_same_user(user)
 
-# train on one day test on other same user for all users
-users_pbar = tqdm(utils.full_user_list)
-for user in users_pbar:
-    users_pbar.set_description("Fitting using features for user %s" % user)
-    trial_train, trial_test = utils.get_traj_for_user(utils.file_path, 'repeats_long', user)
-    features_df_train = pd.read_hdf(os.path.join(FEATURES_DATAFRAMES_DIR, 'features_' + trial_train))
-    features_df_test = pd.read_hdf(os.path.join(FEATURES_DATAFRAMES_DIR, 'features_' + trial_test))
+
+def between_days_same_user(user):
+    trial_train, trial_test = utils.get_traj_for_user(utils.HDF_FILES_DIR, 'repeats_long', user)
+    features_df_train = pd.read_hdf(os.path.join(utils.FEATURES_DATAFRAMES_DIR, 'features_' + trial_train))
+    features_df_test = pd.read_hdf(os.path.join(utils.FEATURES_DATAFRAMES_DIR, 'features_' + trial_test))
     rf_model = RandomForestClassifier(n_estimators=30)
-
     # train
-    logger.info(f'Processing features_{trial_train}')
+    logger.debug(f'Processing features_{trial_train}')
     X_train, y_train = utils.prepare_X_y_from_dataframe(features_df_train, target='TRAJ_GT_LAST')
     logger.debug(f'rf estimators {rf_model.n_estimators}')
-    logger.info(f'Fitting features_{trial_train}')
+    logger.info(f'\nFitting features_{trial_train}')
     rf_model.fit(X_train, y_train)
-    logger.info(f'Finished fitting features_{trial_train}')
+    logger.debug(f'Finished fitting features_{trial_train}')
     del X_train, y_train, features_df_train
-
     # test
-    logger.info(f'testing on features_{trial_test}')
+    logger.debug(f'testing on features_{trial_test}')
     X_test, y_test = utils.prepare_X_y_from_dataframe(features_df_test, target='TRAJ_GT_LAST')
     # test model
     logger.debug(f'predicting features_{trial_test}')
     y_pred = rf_model.predict(X_test)
     # metrics
-    logger.info(metrics.classification_report(y_pred, y_test))
+    logger.info('\n' + str(metrics.classification_report(y_pred, y_test)))
     del X_test, y_test, features_df_test
+
+
+if __name__ == '__main__':
+    argparse = parser = argparse.ArgumentParser()
+    parser.add_argument('-u', '--user', default='03', type=str,
+                        help='user ID to evaluate', choices=utils.FULL_USER_LIST)
+    parser.add_argument('-a', '--all_users', default=False, type=bool, help='Evaluate on all users')
+
+    args = parser.parse_args()
+
+    if args.all_users:
+        between_days_same_user_for_all_users()
+    else:
+        between_days_same_user(args.user)
