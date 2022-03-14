@@ -7,7 +7,7 @@ class RawEmgConvnet(nn.Module):
     def __init__(self, number_of_class, enhanced=False):
         super(RawEmgConvnet, self).__init__()
         self.enhanced = enhanced
-        self._one_dim_pad = OneDimCircularPadding()
+        # self._one_dim_pad = OneDimCircularPadding()
         self._conv1 = nn.Conv2d(1, 32, kernel_size=(3, 5))
         self._pool1 = nn.MaxPool2d(kernel_size=(1, 3))
         self._batch_norm1 = nn.BatchNorm2d(32)
@@ -58,7 +58,8 @@ class RawEmgConvnet(nn.Module):
                 m.bias.data.zero_()
 
     def forward(self, x):
-        conv1 = self._dropout1(self._prelu1(self._batch_norm1(self._conv1(self._one_dim_pad(x)))))
+        conv1 = self._dropout1(self._prelu1(self._batch_norm1(self._conv1(x))))
+        # conv1 = self._dropout1(self._prelu1(self._batch_norm1(self._conv1(self._one_dim_pad(x)))))
         # print(conv1.shape)
         pool1 = self._pool1(conv1)
         # print(pool1.shape)
@@ -66,8 +67,8 @@ class RawEmgConvnet(nn.Module):
             conv2 = self._dropout2(self._prelu2(self._batch_norm2(self._conv2(pool1))))
             pool2 = self._pool2(conv2)
         flatten_tensor = self.flatten(pool1)  # pool2.view(-1, 1024) if self.enhanced else pool1.view(-1, 1024)
-        # fc1 = self._dropout3(self._prelu3(self._batch_norm3(self._fc1(flatten_tensor))))
-        fc1 = self._dropout3(self._prelu3(self._fc1(flatten_tensor)))
+        fc1 = self._dropout3(self._prelu3(self._batch_norm3(self._fc1(flatten_tensor))))
+        # fc1 = self._dropout3(self._prelu3(self._fc1(flatten_tensor)))
         output = self._output(fc1)
         # output = self._output_softmax(output)
         return output

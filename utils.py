@@ -14,6 +14,7 @@ FULL_TRAJ_LIST = ['sequential', 'repeats_long', 'repeats_short']
 HDF_FILES_DIR = '../putemg-downloader/Data-HDF5'
 FEATURES_DATAFRAMES_DIR = 'features_dataframes'
 
+
 def config_logger(name='default', level=logging.DEBUG):
     # config logger
     log_format = '%(created)f:%(levelname)s:%(name)s:%(module)s:%(message)s'
@@ -39,7 +40,7 @@ def prepare_X_y(data_file: str, target='TRAJ_GT', drop_cols=True):
     # remove "idle" and "relax"
     df = df[df[target] > 0]
     X = df.iloc[:, 0:24].to_numpy()
-    y = df[target]
+    y = df[target].to_numpy()
     del df
     return X, y
 
@@ -47,7 +48,7 @@ def prepare_X_y(data_file: str, target='TRAJ_GT', drop_cols=True):
 def prepare_X_y_from_dataframe(df: pd.DataFrame, target='TRAJ_GT'):
     # remove "idle" and "relax"
     df = df[df[target] > 0]
-    y = df[target]
+    y = df[target].to_numpy()
     X = df.drop([target], axis=1)
     X = X.to_numpy()
     return X, y

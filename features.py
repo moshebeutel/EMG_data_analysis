@@ -2,6 +2,7 @@ import logging
 
 from sklearn import metrics
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 import argparse
 
 import biolab_utilities
@@ -96,12 +97,14 @@ def between_days_same_user(user):
     features_df_train = pd.read_hdf(os.path.join(utils.FEATURES_DATAFRAMES_DIR, 'features_' + trial_train))
     features_df_test = pd.read_hdf(os.path.join(utils.FEATURES_DATAFRAMES_DIR, 'features_' + trial_test))
     rf_model = RandomForestClassifier(n_estimators=30)
+    lda_model = LinearDiscriminantAnalysis(solver="svd", store_covariance=True)
     # train
     logger.debug(f'Processing features_{trial_train}')
     X_train, y_train = utils.prepare_X_y_from_dataframe(features_df_train, target='TRAJ_GT_LAST')
     logger.debug(f'rf estimators {rf_model.n_estimators}')
     logger.info(f'\nFitting features_{trial_train}')
-    rf_model.fit(X_train, y_train)
+    # rf_model.fit(X_train, y_train)
+    lda_model.fit(X_train, y_train)
     logger.debug(f'Finished fitting features_{trial_train}')
     del X_train, y_train, features_df_train
     # test
@@ -109,7 +112,8 @@ def between_days_same_user(user):
     X_test, y_test = utils.prepare_X_y_from_dataframe(features_df_test, target='TRAJ_GT_LAST')
     # test model
     logger.debug(f'predicting features_{trial_test}')
-    y_pred = rf_model.predict(X_test)
+    # y_pred = rf_model.predict(X_test)
+    y_pred = lda_model.predict(X_test)
     # metrics
     logger.info('\n' + str(metrics.classification_report(y_pred, y_test)))
     del X_test, y_test, features_df_test
