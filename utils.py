@@ -5,7 +5,7 @@ import sys
 import pandas as pd
 import re
 import errno
-
+import matplotlib.pyplot as plt
 COLS_TO_DROP = ['TRAJ_1', 'type', 'subject', 'trajectory', 'date_time', 'TRAJ_GT_NO_FILTER', 'VIDEO_STAMP']
 FULL_USER_LIST = ['03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '18',
                   '19', '20', '22', '23', '24', '25', '26', '27', '29', '30', '31', '33', '34', '35', '36', '38',
@@ -29,6 +29,27 @@ def config_logger(name='default', level=logging.DEBUG):
     created_logger = logging.getLogger(name + '_logger')
     created_logger.addHandler(handler)
     return created_logger
+
+
+def show_learning_curve(train_loss_list, val_loss_list, train_accuracy, val_accuracy,
+                        num_epochs, title, figsize=(12, 12)):
+    fig, axes = plt.subplots(1, 2, figsize=figsize);
+    axes[0].set_xlabel('epochs')
+    axes[0].set_ylabel('loss')
+    axes[0].plot(range(num_epochs), train_loss_list, label="Train", color='blue')
+    # axes[0].plot(range(num_epochs), val_loss_list, label="Validation", color='red')
+    axes[0].legend()
+    axes[0].set_title('Loss vs Epoch')
+
+    axes[1].set_xlabel('epochs')
+    axes[1].set_ylabel('accuracy')  # we already handled the x-label with ax1
+    axes[1].plot(range(num_epochs), train_accuracy, label="Train", color='blue')
+    # axes[1].plot(range(num_epochs), val_accuracy, label="Validation", color='red')
+    axes[1].legend()
+    axes[1].set_title('Accuracy vs Epoch')
+
+    fig.suptitle(title)
+    plt.show()
 
 
 def prepare_X_y(data_file: str, target='TRAJ_GT', drop_cols=True):
