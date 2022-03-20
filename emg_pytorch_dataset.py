@@ -10,21 +10,26 @@ class EmgDatasetMap(Dataset):
 
     def __init__(self, users_list=utils.FULL_USER_LIST,
                  data_dir=utils.FEATURES_DATAFRAMES_DIR, target_col='TRAJ_GT', trajectories=['sequential'],
-                 transform=None, target_transform=None, max_cache_size=2, window_size=0):
+                 transform=None, target_transform=None, max_cache_size=2, window_size=0, stride=1,
+                 filter=None, shrink_to_one_raw=False, logger=None):
 
         # list all filenames for given users and given trajectories
         user_trains = [f'emg_gestures-{user}-{traj}' for user in users_list for traj in trajectories]
         user_gesture_files = glob.glob(os.path.join(data_dir, "*.hdf5"))
         self.train_user_files = [f for f in user_gesture_files if any([a for a in user_trains if a in f])]
-
+        if logger:
+            logger.info(f'{len(self.train_user_files)} files in dataset')
         # index first raw of every file
         length = 0
         self.base_indices: dict = {}
         for f in self.train_user_files:
             self.base_indices[length] = f
             df = pd.read_hdf(f)
-            length += int(df.shape[0]) - window_size
+            df = filter(df) if filter is not None else df
+            length += int((int(df.shape[0]) - (window_size - stride)) / stride)
             del df
+        if logger:
+            logger.info(f'{length} data items in dataset')
         self.len = length
         self.base_indices_keys = list(self.base_indices.keys())
         self.target_col = target_col
@@ -35,7 +40,10 @@ class EmgDatasetMap(Dataset):
         self.df_cache: dict = {}
 
         self.window_size = window_size
-
+        self.stride = stride
+        self.filter = filter
+        self.shrink_to_one_raw = shrink_to_one_raw
+        self.logger = logger
     def __len__(self):
         return self.len
 
@@ -61,6 +69,8 @@ class EmgDatasetMap(Dataset):
                 f = self.base_indices[largest_base]
                 # load dataframe from file
                 df = pd.read_hdf(f)
+                # filter dataframe if filter was given
+                df = self.filter(df) if self.filter is not None else df
                 # remove irrelevant fields
                 df = df.drop(utils.COLS_TO_DROP, axis=1)
                 # change action -1 to 10
@@ -70,11 +80,17 @@ class EmgDatasetMap(Dataset):
                 # keep cache size
                 if len(self.df_cache) > self.max_cache_size:
                     self.df_cache.pop(list(self.df_cache.keys())[0])
+            # raw index in file
             local_id = ind - largest_base
+            local_id *= self.stride
+            # take window of raws
             data = df.iloc[local_id:local_id+self.window_size, :]
+            # take target as last raw
             target = data.iloc[-1][self.target_col]
             data = data.drop([self.target_col]) if data is pd.Series else data.drop([self.target_col], axis=1)
             data_tensor_tmp = torch.unsqueeze(torch.tensor(data.values.astype(float), dtype=torch.float32), dim=0)
+            if self.shrink_to_one_raw:
+                data_tensor_tmp = data_tensor_tmp.reshape(1, -1, 3, 8).mean(axis=2)
             target_tensor_tmp = torch.tensor(target, dtype=torch.long)
             del data, target
             # aggregate data in tensor

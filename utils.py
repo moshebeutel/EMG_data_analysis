@@ -37,14 +37,14 @@ def show_learning_curve(train_loss_list, val_loss_list, train_accuracy, val_accu
     axes[0].set_xlabel('epochs')
     axes[0].set_ylabel('loss')
     axes[0].plot(range(num_epochs), train_loss_list, label="Train", color='blue')
-    # axes[0].plot(range(num_epochs), val_loss_list, label="Validation", color='red')
+    axes[0].plot(range(num_epochs), val_loss_list, label="Validation", color='red')
     axes[0].legend()
     axes[0].set_title('Loss vs Epoch')
 
     axes[1].set_xlabel('epochs')
     axes[1].set_ylabel('accuracy')  # we already handled the x-label with ax1
     axes[1].plot(range(num_epochs), train_accuracy, label="Train", color='blue')
-    # axes[1].plot(range(num_epochs), val_accuracy, label="Validation", color='red')
+    axes[1].plot(range(num_epochs), val_accuracy, label="Validation", color='red')
     axes[1].legend()
     axes[1].set_title('Accuracy vs Epoch')
 
@@ -118,3 +118,5 @@ def read_trial(trial: str) -> pd.DataFrame:
     assert os.path.exists(filename_trial), f'filename {filename_trial} does not exist'
     record = pd.read_hdf(filename_trial)
     return record
+
+
