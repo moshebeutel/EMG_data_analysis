@@ -52,14 +52,14 @@ def show_learning_curve(train_loss_list, val_loss_list, train_accuracy, val_accu
     plt.show()
 
 
-def prepare_X_y(data_file: str, target='TRAJ_GT', drop_cols=True):
+def prepare_X_y(data_file: str, target='TRAJ_GT', drop_cols=True, min_action=0):
     # read dataframe from file
     df = pd.read_hdf(data_file)
     # drop irrelevant columns
     if drop_cols:
         df.drop(COLS_TO_DROP, axis=1, inplace=True)
     # remove "idle" and "relax"
-    df = df[df[target] > 0]
+    df = df[df[target] > min_action]
     X = df.iloc[:, 0:24].to_numpy()
     y = df[target].to_numpy()
     del df
