@@ -11,12 +11,14 @@ class EmgDatasetMap(Dataset):
     def __init__(self, users_list=utils.FULL_USER_LIST,
                  data_dir=utils.FEATURES_DATAFRAMES_DIR, target_col='TRAJ_GT', trajectories=['sequential'],
                  transform=None, target_transform=None, max_cache_size=2, window_size=0, stride=1,
-                 filter=None, shrink_to_one_raw=False, logger=None):
+                 filter=None, shrink_to_one_raw=False, logger=None, file_index=None):
 
         # list all filenames for given users and given trajectories
         user_trains = [f'emg_gestures-{user}-{traj}' for user in users_list for traj in trajectories]
         user_gesture_files = glob.glob(os.path.join(data_dir, "*.hdf5"))
         self.train_user_files = [f for f in user_gesture_files if any([a for a in user_trains if a in f])]
+        if file_index is not None:
+            self.train_user_files = [self.train_user_files[file_index]]
         if logger:
             logger.info(f'{len(self.train_user_files)} files in dataset')
         # index first raw of every file
