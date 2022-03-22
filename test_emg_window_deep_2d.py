@@ -47,7 +47,7 @@ def main():
     logger = utils.config_logger(os.path.basename(__file__)[:-3], level=logging.DEBUG)
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     filter = lambda df: df.iloc[500000:650000, :]
-    dataset = EmgDatasetMap(users_list=['06'], data_dir=utils.HDF_FILES_DIR, window_size=30, filter=filter)
+    dataset = EmgDatasetMap(users_list=['06'], data_dir=utils.HDF_FILES_DIR, window_size=30, filter_fn=filter)
     dataloader = DataLoader(dataset, batch_size=1024, shuffle=False, num_workers=0)
     model = RawEmgConvnet(number_of_class=11, enhanced=False)
     model.load_state_dict(torch.load('./window_2d.pt'))
