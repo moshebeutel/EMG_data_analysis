@@ -2,15 +2,16 @@ import torch
 import torch.nn as nn
 import numpy as np
 
+
 class RawEmgConvnet(nn.Module):
     def __init__(self, number_of_class, window_size=30, shrink_to_one_raw=False, enhanced=False):
         super(RawEmgConvnet, self).__init__()
         self.enhanced = enhanced
         self._shrink_to_one_raw = shrink_to_one_raw
         if shrink_to_one_raw:
-            self._shrink = lambda x: x.reshape(-1, window_size, 3, 8).median(axis=-2).\
+            self._shrink = lambda x: x.reshape(-1, window_size, 3, 8).median(axis=-2). \
                 values.reshape(-1, 1, window_size, 8)
-        self._conv1 = nn.Conv2d(1, 32, kernel_size=(128, 4))
+        self._conv1 = nn.Conv2d(1, 32, kernel_size=(128, 3), padding=(0, 1), padding_mode='circular')
         self._pool1 = nn.MaxPool2d(kernel_size=(128, 4))
         self._batch_norm1 = nn.BatchNorm2d(32)
         self._prelu1 = nn.PReLU(32)
@@ -23,8 +24,8 @@ class RawEmgConvnet(nn.Module):
             self._prelu2 = nn.PReLU(64)
             self._dropout2 = nn.Dropout2d(.3)
 
-        self.flatten = lambda x: x.view(-1, 288)
-        self._fc1 = nn.Linear(288, 64)
+        self.flatten = lambda x: x.view(-1, 896)
+        self._fc1 = nn.Linear(896, 64)
         self._batch_norm3 = nn.BatchNorm1d(64)
         self._prelu3 = nn.PReLU(64)
         self._dropout3 = nn.Dropout(.3)
@@ -64,7 +65,7 @@ class RawEmgConvnet(nn.Module):
         if self.enhanced:
             conv2 = self._dropout2(self._prelu2(self._batch_norm2(self._conv2(pool1))))
             pool2 = self._pool2(conv2)
-        flatten_tensor = self.flatten(pool1)  # pool2.view(-1, 1024) if self.enhanced else pool1.view(-1, 1024)
+        flatten_tensor = self.flatten(pool2)  # pool2.view(-1, 1024) if self.enhanced else pool1.view(-1, 1024)
         if flatten_tensor.size(0) != x.size(0):
             print()
         fc1 = self._dropout3(self._prelu3(self._batch_norm3(self._fc1(flatten_tensor))))
@@ -135,6 +136,7 @@ class RawEmgWindowConvnet(nn.Module):
         # fc1 = self._dropout3(self._prelu3(self._fc1(flatten_tensor)))
         output = self._output(fc1)
         return output
+
 
 class OneDimCircularPadding(nn.Module):
     def __init__(self, pad=((0, 0), (1, 1))):

@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from emg_pytorch_model import RawEmgConvnet
+from models.model3d import RawEmg3DConvnet
 import utils
 import os
 import logging
@@ -23,7 +24,7 @@ WINDOW_STRIDE = int(WINDOW_SIZE / 64)
 NUM_OF_CLASSES = 4
 BASE_CLASS_NUM = 6
 DEBUG_PRINT_ITERATION = 100
-SHRINK_TO_ONE_ROW = True
+SHRINK_TO_ONE_ROW = False
 LEARNING_RATE = 0.000001  # 0.000011288378916846883
 MAX_CACHE_SIZE = 20
 
@@ -50,8 +51,9 @@ test_dataset = EmgDatasetMap(users_list=users_test_list, data_dir=utils.HDF_FILE
                              filter_fn=filter_func, logger=logger)
 train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=8, pin_memory=True)
 test_dataloader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=2, pin_memory=True)
-model = RawEmgConvnet(number_of_class=NUM_OF_CLASSES, enhanced=False, window_size=WINDOW_SIZE,
-                      shrink_to_one_raw=SHRINK_TO_ONE_ROW).to(device)
+# model = RawEmgConvnet(number_of_class=NUM_OF_CLASSES, enhanced=True, window_size=WINDOW_SIZE,
+#                       shrink_to_one_raw=SHRINK_TO_ONE_ROW).to(device)
+model = RawEmg3DConvnet(number_of_classes=NUM_OF_CLASSES, window_size=WINDOW_SIZE).to(device)
 
 criterion = nn.CrossEntropyLoss()
 optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
