@@ -17,7 +17,7 @@ FEATURES_DATAFRAMES_DIR = 'features_dataframes'
 
 def config_logger(name='default', level=logging.DEBUG):
     # config logger
-    log_format = '%(created)f:%(levelname)s:%(name)s:%(module)s:%(message)s'
+    log_format = '%(asctime)s:%(levelname)s:%(name)s:%(module)s:%(message)s'
     formatter = logging.Formatter(log_format)
     logging.basicConfig(level=level,
                         format=log_format,
