@@ -8,61 +8,78 @@ import torch.nn as nn
 import torch.optim as optim
 from emg_pytorch_model import RawEmgConvnet
 from models.model3d import RawEmg3DConvnet
+from emg_pytorch_model_no_window import FeatureEmgConvnet
+from data.datasets.emg_feature_dataset import EmgFeatureDataset
 import utils
 import os
 import logging
 from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
-
-logger = utils.config_logger(os.path.basename(__file__)[:-3], level=logging.DEBUG)
-writer = SummaryWriter()
 # constants
-NUM_OF_EPOCHS = 5
+NUM_OF_EPOCHS = 100
 NUM_OF_USERS = 44
-BATCH_SIZE = 32
-WINDOW_SIZE = 1280
-WINDOW_STRIDE = int(WINDOW_SIZE / 64)
-NUM_OF_CLASSES = 4
-BASE_CLASS_NUM = 6
-DEBUG_PRINT_ITERATION = 100
+BATCH_SIZE = 128
+WINDOW_SIZE = 260
+WINDOW_STRIDE = int(WINDOW_SIZE / 32)
+NUM_OF_CLASSES = 7
+LABELS = ['1', '2', '3', '6', '7', '8', '9']
+BASE_CLASS_NUM = 1
+DEBUG_PRINT_ITERATION = 25
 SHRINK_TO_ONE_ROW = False
-LEARNING_RATE = 0.000001  # 0.000011288378916846883
+LEARNING_RATE = 0.001  # 0.000011288378916846883
+L1 = 1e-5
 MAX_CACHE_SIZE = 20
-MODEL_TYPE = RawEmg3DConvnet
-assert MODEL_TYPE in [RawEmg3DConvnet, RawEmgConvnet]
-
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# device = torch.device('cpu')
+MODEL_TYPE = FeatureEmgConvnet
+MAX_NUM_OF_ROWS_FROM_FILE = 250000
+assert MODEL_TYPE in [RawEmg3DConvnet, RawEmgConvnet, FeatureEmgConvnet]
+TEST_NAME = 'feature_train_on_[04_05]_val_on_06_test_on_03'
+logger = utils.config_logger(TEST_NAME, level=logging.DEBUG)
+writer = SummaryWriter()
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device('cpu')
 logger.debug(f'Device: {device}')
-users_train_list = utils.FULL_USER_LIST[:4]
+users_train_list = ['04', '05']
+users_validation_list = ['03']
 users_test_list = ['06']
 users_train_list = [f for f in users_train_list if f not in users_test_list]
 # assert int(len(users_train_list)) + int(len(users_test_list)) == num_of_users, 'Wrong Users Number'
 logger.debug(f'User Train List:\n{users_train_list}')
+logger.debug(f'User Validation List:\n{users_validation_list}')
 logger.debug(f'User Test List:\n{users_test_list}')
 
 
 def filter_func(df: pd.DataFrame) -> pd.DataFrame:
-    return df.loc[df['TRAJ_GT'] > BASE_CLASS_NUM - 1, :]
+    return df.loc[df['TRAJ_GT'] > BASE_CLASS_NUM - 1, :].iloc[:MAX_NUM_OF_ROWS_FROM_FILE, :]
 
 
-train_dataset = EmgDatasetMap(users_list=users_train_list, data_dir=utils.HDF_FILES_DIR, window_size=WINDOW_SIZE,
-                              stride=WINDOW_STRIDE, max_cache_size=MAX_CACHE_SIZE, load_to_memory=True,
-                              filter_fn=filter_func, logger=logger)
-test_dataset = EmgDatasetMap(users_list=users_test_list, data_dir=utils.HDF_FILES_DIR, window_size=WINDOW_SIZE,
-                             stride=WINDOW_STRIDE, load_to_memory=True, max_cache_size=4,
-                             filter_fn=filter_func, logger=logger)
-train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=8, pin_memory=True)
-test_dataloader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=2, pin_memory=True)
+if MODEL_TYPE == RawEmg3DConvnet:
+    train_dataset = EmgDatasetMap(users_list=users_train_list, data_dir=utils.HDF_FILES_DIR, window_size=WINDOW_SIZE,
+                                  stride=WINDOW_STRIDE, max_cache_size=MAX_CACHE_SIZE, load_to_memory=True,
+                                  filter_fn=filter_func, logger=logger)
+    test_dataset = EmgDatasetMap(users_list=users_test_list, data_dir=utils.HDF_FILES_DIR, window_size=WINDOW_SIZE,
+                                 stride=WINDOW_STRIDE, load_to_memory=True, max_cache_size=4,
+                                 filter_fn=filter_func, logger=logger)
+    train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=8, pin_memory=True)
+    test_dataloader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=2, pin_memory=True)
+    model = RawEmg3DConvnet(number_of_classes=NUM_OF_CLASSES, window_size=WINDOW_SIZE).to(device) \
+        if MODEL_TYPE == RawEmg3DConvnet else \
+        RawEmgConvnet(number_of_class=NUM_OF_CLASSES, enhanced=True, window_size=WINDOW_SIZE,
+                      shrink_to_one_raw=SHRINK_TO_ONE_ROW)
+elif MODEL_TYPE == FeatureEmgConvnet:
+    train_dataset = EmgFeatureDataset(users_list=users_train_list, logger=logger)
+    validation_dataset = EmgFeatureDataset(users_list=users_validation_list, logger=logger)
+    test_dataset = EmgFeatureDataset(users_list=users_test_list, logger=logger)
+    train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=8, pin_memory=True)
+    validation_dataloader = DataLoader(validation_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=2,
+                                       pin_memory=True)
+    test_dataloader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=2, pin_memory=True)
+    model = FeatureEmgConvnet(number_of_class=NUM_OF_CLASSES)
 
-model = RawEmg3DConvnet(number_of_classes=NUM_OF_CLASSES, window_size=WINDOW_SIZE).to(device) \
-    if MODEL_TYPE == RawEmg3DConvnet else \
-    RawEmgConvnet(number_of_class=NUM_OF_CLASSES, enhanced=True, window_size=WINDOW_SIZE,
-                  shrink_to_one_raw=SHRINK_TO_ONE_ROW).to(device)
+model = model.to(device)
 
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
+optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=L1)
 
 # train
 train_loss_list, train_accuracy_list = [], []
@@ -83,6 +100,7 @@ for epoch in epoch_pbar:
         total_counter += 1
         emg_data = data[0].to(device)
         labels = (data[1] - BASE_CLASS_NUM).to(device)
+        labels[labels > 2] -= 2
         total_train += labels.size(0)
         optimizer.zero_grad()
         outputs = model(emg_data)
@@ -94,10 +112,12 @@ for epoch in epoch_pbar:
         correct = (predicted == labels).sum().item()
         correct_train += int(correct)
         running_loss += float(loss)
-        labels += BASE_CLASS_NUM
+        # labels[labels > 2] += 2
+        # labels += BASE_CLASS_NUM
         acc = float(correct) / float(labels.size(0))
         writer.add_scalar("Accuracy/train", acc, total_counter)
-        y_pred += (predicted + BASE_CLASS_NUM).cpu().tolist()
+        y_pred += predicted.cpu().tolist()
+        # y_pred += (predicted + BASE_CLASS_NUM).cpu().tolist()
         y_labels += labels.cpu().tolist()
         if i % DEBUG_PRINT_ITERATION == DEBUG_PRINT_ITERATION - 1:
             _, global_counts = torch.tensor(y_labels).unique(return_counts=True)
@@ -105,14 +125,14 @@ for epoch in epoch_pbar:
             logger.debug(f'Epoch {epoch} batch num {i} loss {float(loss)}'
                          f' accuracy {acc} '
                          f'labels {unique.tolist()}, counts {counts.tolist()}')
-            writer.add_scalar('Counts Std/Mean', global_counts.float().std() / global_counts.float().mean()
-                              , global_step=total_counter)
-            writer.add_scalar('Counts Max/Min', global_counts.float().max() / global_counts.float().min()
-                              , global_step=total_counter)
-            writer.add_scalar('Curren Counts Std/Mean', counts.float().std() / counts.float().mean()
-                              , global_step=total_counter)
-            writer.add_scalar('Current Counts Max/Min', counts.float().max() / counts.float().min()
-                              , global_step=total_counter)
+            # writer.add_scalar('Counts Std_Mean', global_counts.float().std() / global_counts.float().mean()
+            #                   , global_step=total_counter)
+            # writer.add_scalar('Counts Max_Min', global_counts.float().max() / global_counts.float().min()
+            #                   , global_step=total_counter)
+            # writer.add_scalar('Curren Counts Std_Mean', counts.float().std() / counts.float().mean()
+            #                   , global_step=total_counter)
+            # writer.add_scalar('Current Counts Max_Min', counts.float().max() / counts.float().min()
+            #                   , global_step=total_counter)
 
             # writer.add_graph(model, emg_data)
             # writer.add_embedding(emg_data.reshape(BATCH_SIZE, -1),
@@ -129,8 +149,10 @@ for epoch in epoch_pbar:
     # validation
     logger.info(f'Epoch {epoch} Validation')
 
-    val_loss, val_acc = test_window(model, test_dataloader, device, logger,
+    val_loss, val_acc = test_window(model, validation_dataloader, device, logger,
                                     base_class_num=BASE_CLASS_NUM)
+    writer.add_scalar("Accuracy/validation", val_acc, epoch)
+    writer.add_scalar("Loss/validation", float(val_loss), epoch)
     val_loss_list.append(val_loss)
     val_accuracy_list.append(val_acc)
     epoch_pbar.set_postfix({'epoch': epoch, 'train loss': epoch_loss, 'train_accuracy': train_acc,
@@ -139,12 +161,15 @@ for epoch in epoch_pbar:
 
     writer.flush()
 utils.show_learning_curve(train_loss_list, val_loss_list, train_accuracy_list, val_accuracy_list, NUM_OF_EPOCHS,
-                          title='window 2d loss and accuracy')
+                          title=TEST_NAME)
+
+
 
 # test
 # test_dataset = EmgDatasetMap(users_list=users_test_list, data_dir=utils.HDF_FILES_DIR, window_size=WINDOW_SIZE,
 #                              stride=WINDOW_STRIDE,
 #                              filter=filter_func)
 # test_dataloader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=0)
-# test_window(model, test_dataloader, device, logger, base_class_num=BASE_CLASS_NUM)
+logger.info('Finished training. Lets test.')
+test_loss, test_acc = test_window(model, test_dataloader, device, logger, base_class_num=BASE_CLASS_NUM)
 torch.save(model.state_dict(), './window_2d.pt')

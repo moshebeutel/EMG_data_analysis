@@ -10,7 +10,7 @@ class EmgDatasetMap(Dataset):
 
     def __init__(self, users_list=utils.FULL_USER_LIST, load_to_memory=False,
                  data_dir=utils.FEATURES_DATAFRAMES_DIR, target_col='TRAJ_GT', trajectories=['sequential'],
-                 transform=None, target_transform=None, max_cache_size=2, window_size=0, stride=1,
+                 transform=None, target_transform=None, max_cache_size=2, window_size=1, stride=1,
                  filter_fn=None, shrink_to_one_raw=False, logger=None, file_index=None):
 
         # list all filenames for given users and given trajectories

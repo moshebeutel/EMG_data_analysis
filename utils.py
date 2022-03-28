@@ -6,6 +6,7 @@ import pandas as pd
 import re
 import errno
 import matplotlib.pyplot as plt
+
 COLS_TO_DROP = ['TRAJ_1', 'type', 'subject', 'trajectory', 'date_time', 'TRAJ_GT_NO_FILTER', 'VIDEO_STAMP']
 FULL_USER_LIST = ['03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13', '14', '15', '16', '17', '18',
                   '19', '20', '22', '23', '24', '25', '26', '27', '29', '30', '31', '33', '34', '35', '36', '38',
@@ -13,15 +14,16 @@ FULL_USER_LIST = ['03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '1
 FULL_TRAJ_LIST = ['sequential', 'repeats_long', 'repeats_short']
 HDF_FILES_DIR = '../putemg-downloader/Data-HDF5'
 FEATURES_DATAFRAMES_DIR = 'features_dataframes'
+TD_FEATURES = ['WL', 'SSC', 'ZC', 'MAV']
 
 
-def config_logger(name='default', level=logging.DEBUG):
+def config_logger(name='default', level=logging.DEBUG, log_folder='./log/'):
     # config logger
     log_format = '%(asctime)s:%(levelname)s:%(name)s:%(module)s:%(message)s'
     formatter = logging.Formatter(log_format)
     logging.basicConfig(level=level,
                         format=log_format,
-                        filename=f'./log/{time.ctime()}_{name}.log',
+                        filename=f'{log_folder}{time.ctime()}_{name}.log',
                         filemode='w')
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(formatter)
@@ -118,5 +120,3 @@ def read_trial(trial: str) -> pd.DataFrame:
     assert os.path.exists(filename_trial), f'filename {filename_trial} does not exist'
     record = pd.read_hdf(filename_trial)
     return record
-
-

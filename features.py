@@ -71,20 +71,22 @@ def calculate_feature_dataframe(record: pd.DataFrame) -> pd.DataFrame:
     return calculated_features_df
 
 
-# calculate features for all users - save to hdfs
-# users_pbar = tqdm(utils.full_user_list)
-# for user in users_pbar:
-#     users_pbar.set_description("Calculating features for user %s" % user)
-#     trial_train, trial_test = utils.get_traj_for_user(utils.file_path, 'repeats_long', user)
-#     record_train = utils.read_trial(trial_train)
-#     record_test = utils.read_trial(trial_test)
-#     features_df_train: pd.DataFrame = calculate_feature_dataframe(record_train)
-#     features_df_train.to_hdf(os.path.join(FEATURES_DATAFRAMES_DIR, 'features_' + trial_train),
-#                              key='features_df_train', mode='w')
-#     features_df_test: pd.DataFrame = calculate_feature_dataframe(record_test)
-#     features_df_test.to_hdf(os.path.join(FEATURES_DATAFRAMES_DIR, 'features_' + trial_test),
-#                             key='features_df_test', mode='w')
-#     del trial_train, trial_test, record_train, record_test, features_df_train, features_df_test
+def create_feature_hdfs(users_list=utils.FULL_USER_LIST, trajectory='sequential'):
+    users_pbar = tqdm(users_list)
+    for user in users_pbar:
+        users_pbar.set_description("Calculating features for user %s" % user)
+        trial_train, trial_test = utils.get_traj_for_user(utils.HDF_FILES_DIR, trajectory, user)
+        record_train = utils.read_trial(trial_train)
+        record_test = utils.read_trial(trial_test)
+        features_df_train: pd.DataFrame = calculate_feature_dataframe(record_train)
+        features_df_train.to_hdf(os.path.join(utils.FEATURES_DATAFRAMES_DIR, 'features_' + trial_train),
+                                 key='features_df_train', mode='w')
+        features_df_test: pd.DataFrame = calculate_feature_dataframe(record_test)
+        features_df_test.to_hdf(os.path.join(utils.FEATURES_DATAFRAMES_DIR, 'features_' + trial_test),
+                                key='features_df_test', mode='w')
+    del trial_train, trial_test, record_train, record_test, features_df_train, features_df_test
+
+
 def between_days_same_user_for_all_users():
     users_pbar = tqdm(utils.FULL_USER_LIST)
     for user in users_pbar:
@@ -120,6 +122,7 @@ def between_days_same_user(user):
 
 
 if __name__ == '__main__':
+    # create_feature_hdfs(utils.FULL_USER_LIST)
     argparse = parser = argparse.ArgumentParser()
     parser.add_argument('-u', '--user', default='03', type=str,
                         help='user ID to evaluate', choices=utils.FULL_USER_LIST)

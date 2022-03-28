@@ -27,6 +27,7 @@ def test_window(model, dataloader, device, logger, base_class_num=0):
             emg, labels = data
             emg = emg.to(device)
             labels = (labels - base_class_num).to(device)
+            labels[labels > 2] -= 2
             outputs = model(emg)
             loss = criterion(outputs, labels)
             running_loss += float(loss)
