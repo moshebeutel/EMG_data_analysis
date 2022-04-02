@@ -2,11 +2,15 @@ import torch
 import torch.nn as nn
 import numpy as np
 import torch.nn.functional as F
+
+
 class RawEmg3DConvnet(nn.Module):
-    def __init__(self, number_of_classes, window_size=1280, depthwise_multiplier=32, W=3, H=8):
+    def __init__(self, number_of_classes, window_size=1280, depthwise_multiplier=32, W=3, H=8, logger=None):
         super(RawEmg3DConvnet, self).__init__()
-        w_ker_siz = int(window_size/10)
-        hw_ker_siz = int(window_size/20)
+        assert logger is not None
+        self.logger = logger
+        w_ker_siz = int(window_size / 10)
+        hw_ker_siz = int(window_size / 20)
         self._reshape = lambda x: x.reshape(-1, 1, window_size, W, H)
         self._pad_before_last_dim_constant = lambda x: \
             F.pad(x, pad=(0, 0, 1, 1, hw_ker_siz, hw_ker_siz), mode='constant')
@@ -57,28 +61,30 @@ class RawEmg3DConvnet(nn.Module):
                 m.bias.data.zero_()
 
     def forward(self, x):
-        # print('input', x.shape)
+        self.logger.debug(f'input {x.shape}')
         x = self._reshape(x)
-        # print('reshape', x.shape)
+        self.logger.debug(f'reshape {x.shape}')
         x = self._pad_before_last_dim_constant(x)
-        # print('_pad_before_last_dim_constant', x.shape)
+        self.logger.debug(f'_pad_before_last_dim_constant {x.shape}')
         x = self._pad_last_dim_circular(x)
-        # print('pad_last_dim', x.shape)
+        self.logger.debug(f'pad_last_dim {x.shape}')
         conv1 = self._dropout1(self._prelu1(self._batch_norm1(self._conv1(x))))
-        # print('conv1', conv1.shape)
+        self.logger.debug(f'conv1 {conv1.shape}')
         pool1 = self._pool1(conv1)
-        # print('pool1', pool1.shape)
+        self.logger.debug(f'pool1 {pool1.shape}')
         conv2 = self._dropout2(self._prelu2(self._batch_norm2(self._conv2(pool1.squeeze()))))
-        # print('conv2', conv2.shape)
+        self.logger.debug(f'conv2 {conv2.shape}')
         pool2 = self._pool2(conv2)
-        # print('pool2', pool2.shape)
+        self.logger.debug(f'pool2 {pool2.shape}')
         flatten_tensor = self.flatten(pool2)
-        # print('flatten_tensor', flatten_tensor.shape)
+        self.logger.debug(f'flatten_tensor', flatten_tensor.shape)
         # if flatten_tensor.size(0) != x.size(0):
         #     print()
         fc1 = self._dropout3(self._prelu3(self._batch_norm3(self._fc1(flatten_tensor))))
-        # print('fc1', fc1.shape)
+        self.logger.debug(f'fc1 {fc1.shape}')
         output = self._output(fc1)
+        self.logger.debug(f'logits {output}')
         output = F.softmax(output, dim=1)
+        self.logger.debug(f'softmax {output}')
         return output
 

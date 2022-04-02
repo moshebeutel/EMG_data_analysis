@@ -57,7 +57,7 @@ class EmgDatasetMap(Dataset):
         self.filter = filter_fn
         self.shrink_to_one_raw = shrink_to_one_raw
         self.logger = logger
-
+        self.load_to_mem = load_to_memory
     def __len__(self):
         return self.len
 
@@ -73,27 +73,31 @@ class EmgDatasetMap(Dataset):
         target_tensor = None
         for ind in idx:
             # get largest base id smaller than ind
-            assert self.base_indices is not None, 'base indices not initialized'
-            assert isinstance(self.base_indices, pd.Series), 'base_indices not a Series'
-            assert not self.base_indices.empty, 'base_indices empty'
-            largest_base = max([base for base in self.base_indices.index if base <= ind])
-            # get relevant data from cache
-            assert 'filename' in self.df_cache.columns, 'filename column does not exist'
-            df = self.df_cache[self.df_cache['filename'] == self.base_indices.loc[largest_base]]
-            if df.empty:
-                # dataframe not in cache - load from file
-                # get relevant file
-                f = self.base_indices.loc[largest_base]
-                df = self._read_dataframe_to_cache(f)
-                # keep cache size
-                if self.df_cache.index.size > self.max_cache_size:
-                    first_filename = self.df_cache.iloc[0, 'filename']
-                    self.df_cache.drop(self.df_cache[self.df_cache['filename'] == first_filename].index)
-            # raw index in file
-            local_id = ind - largest_base
-            local_id *= self.stride
-            # take window of raws
-            data = df.iloc[local_id:local_id + self.window_size, :].drop('filename', axis=1)
+            if self.load_to_mem:
+                data = self.df_cache.iloc[ind * self.stride:ind * self.stride + self.window_size, :]\
+                    .drop('filename', axis=1)
+            else:
+                assert self.base_indices is not None, 'base indices not initialized'
+                assert isinstance(self.base_indices, pd.Series), 'base_indices not a Series'
+                assert not self.base_indices.empty, 'base_indices empty'
+                largest_base = max([base for base in self.base_indices.index if base <= ind])
+                # get relevant data from cache
+                assert 'filename' in self.df_cache.columns, 'filename column does not exist'
+                df = self.df_cache[self.df_cache['filename'] == self.base_indices.loc[largest_base]]
+                if df.empty:
+                    # dataframe not in cache - load from file
+                    # get relevant file
+                    f = self.base_indices.loc[largest_base]
+                    df = self._read_dataframe_to_cache(f)
+                    # keep cache size
+                    if self.df_cache.index.size > self.max_cache_size:
+                        first_filename = self.df_cache.iloc[0, 'filename']
+                        self.df_cache.drop(self.df_cache[self.df_cache['filename'] == first_filename].index)
+                # raw index in file
+                local_id = ind - largest_base
+                local_id *= self.stride
+                # take window of raws
+                data = df.iloc[local_id:local_id + self.window_size, :].drop('filename', axis=1)
             # take target as last raw
             target = data.iloc[-1][self.target_col]
             data = data.drop([self.target_col]) if data is pd.Series else data.drop([self.target_col], axis=1)
@@ -101,7 +105,7 @@ class EmgDatasetMap(Dataset):
             if self.shrink_to_one_raw:
                 data_tensor_tmp = data_tensor_tmp.reshape(1, -1, 3, 8).mean(axis=2)
             target_tensor_tmp = torch.tensor(target, dtype=torch.long)
-            del data, target, df
+            del data, target
             # aggregate data in tensor
             data_tensor = data_tensor_tmp if data_tensor is None \
                 else torch.concat([data_tensor, data_tensor_tmp], axis=0)
