@@ -29,8 +29,10 @@ class EmgDatasetMap(Dataset):
 
         for f in train_user_files:
             self.base_indices.loc[length] = f
-            df = pd.read_hdf(f)
+            df: pd.DataFrame = pd.read_hdf(f)
+            assert not df.empty, f'{f} contains an empty dataframe'
             df = df if filter_fn is None else filter_fn(df)
+            assert not df.empty, 'Filtering resulted in an empty dataframe'
             length += int((int(df.shape[0]) - (window_size - stride)) / stride)
             # Add filename column
             df['filename'] = f
