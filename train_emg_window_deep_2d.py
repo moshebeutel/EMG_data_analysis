@@ -17,7 +17,7 @@ from tqdm import tqdm
 from torch.utils.tensorboard import SummaryWriter
 
 # constants
-NUM_OF_EPOCHS = 100
+NUM_OF_EPOCHS = 200
 NUM_OF_USERS = 44
 BATCH_SIZE = 128
 WINDOW_SIZE = 260
@@ -30,19 +30,19 @@ SHRINK_TO_ONE_ROW = False
 LEARNING_RATE = 0.001  # 0.000011288378916846883
 L1 = 1e-5
 MAX_CACHE_SIZE = 20
-MODEL_TYPE = FeatureEmgConvnet
-MAX_NUM_OF_ROWS_FROM_FILE = 1000000
+MODEL_TYPE = RawEmg3DConvnet
+MAX_NUM_OF_ROWS_FROM_FILE = 550000
 assert MODEL_TYPE in [RawEmg3DConvnet, RawEmgConvnet, FeatureEmgConvnet]
-TEST_NAME = 'raw_window_train_on_[04_05]_val_on_06_test_on_03'
+TEST_NAME = 'raw_window_train_val_test_on_03_first_file_small_kernel'
 logger = utils.config_logger(TEST_NAME, level=logging.INFO)
 writer = SummaryWriter()
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-# device = torch.device('cpu')
+# device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device('cpu')
 logger.debug(f'Device: {device}')
-users_train_list = ['04', '05']
-users_validation_list = ['06']
+users_train_list = ['03']
+users_validation_list = ['03']
 users_test_list = ['03']
-users_train_list = [f for f in users_train_list if f not in users_test_list]
+# users_train_list = [f for f in users_train_list if f not in users_test_list]
 # assert int(len(users_train_list)) + int(len(users_test_list)) == num_of_users, 'Wrong Users Number'
 logger.debug(f'User Train List:\n{users_train_list}')
 logger.debug(f'User Validation List:\n{users_validation_list}')
@@ -50,19 +50,29 @@ logger.debug(f'User Test List:\n{users_test_list}')
 
 
 def filter_func(df: pd.DataFrame) -> pd.DataFrame:
-    return df.loc[df['TRAJ_GT'] > BASE_CLASS_NUM - 1, :].iloc[:MAX_NUM_OF_ROWS_FROM_FILE, :]
+    return df.iloc[:MAX_NUM_OF_ROWS_FROM_FILE, :].loc[df['TRAJ_GT'] > BASE_CLASS_NUM - 1, :]
+
+
+def filter_func_val(df: pd.DataFrame) -> pd.DataFrame:
+    return df.iloc[MAX_NUM_OF_ROWS_FROM_FILE:
+                   2 * MAX_NUM_OF_ROWS_FROM_FILE, :].loc[df['TRAJ_GT'] > BASE_CLASS_NUM - 1, :]
+
+
+def filter_func_test(df: pd.DataFrame) -> pd.DataFrame:
+    return df.iloc[2 * MAX_NUM_OF_ROWS_FROM_FILE:3 * MAX_NUM_OF_ROWS_FROM_FILE, :].loc[df['TRAJ_GT'] >
+                                                                                       BASE_CLASS_NUM - 1, :]
 
 
 if MODEL_TYPE == RawEmg3DConvnet:
     train_dataset = EmgDatasetMap(users_list=users_train_list, data_dir=utils.HDF_FILES_DIR, window_size=WINDOW_SIZE,
                                   stride=WINDOW_STRIDE, max_cache_size=MAX_CACHE_SIZE, load_to_memory=True,
-                                  filter_fn=filter_func, logger=logger)
+                                  filter_fn=filter_func, logger=logger, file_index=0)
     validation_dataset = EmgDatasetMap(users_list=users_validation_list, data_dir=utils.HDF_FILES_DIR,
                                        window_size=WINDOW_SIZE, stride=WINDOW_STRIDE, load_to_memory=True,
-                                       max_cache_size=4, filter_fn=filter_func, logger=logger)
+                                       max_cache_size=4, filter_fn=filter_func_val, logger=logger, file_index=0)
     test_dataset = EmgDatasetMap(users_list=users_test_list, data_dir=utils.HDF_FILES_DIR, window_size=WINDOW_SIZE,
                                  stride=WINDOW_STRIDE, load_to_memory=True, max_cache_size=4,
-                                 filter_fn=filter_func, logger=logger)
+                                 filter_fn=filter_func_test, logger=logger, file_index=0)
     train_dataloader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True, num_workers=8, pin_memory=True)
     validation_dataloader = DataLoader(validation_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=2,
                                        pin_memory=True)
@@ -89,7 +99,6 @@ optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=L1)
 # train
 train_loss_list, train_accuracy_list = [], []
 val_loss_list, val_accuracy_list = [], []
-
 
 epoch_pbar = tqdm(range(NUM_OF_EPOCHS))
 total_counter = 0
@@ -128,8 +137,8 @@ for epoch in epoch_pbar:
             _, global_counts = torch.tensor(y_labels).unique(return_counts=True)
             unique, counts = labels.cpu().unique(return_counts=True)
             logger.info(f'Epoch {epoch} batch num {i} loss {float(loss)}'
-                         f' accuracy {acc} '
-                         f'labels {unique.tolist()}, counts {counts.tolist()}')
+                        f' accuracy {acc} '
+                        f'labels {unique.tolist()}, counts {counts.tolist()}')
             # writer.add_scalar('Counts Std_Mean', global_counts.float().std() / global_counts.float().mean()
             #                   , global_step=total_counter)
             # writer.add_scalar('Counts Max_Min', global_counts.float().max() / global_counts.float().min()
@@ -167,8 +176,6 @@ for epoch in epoch_pbar:
     writer.flush()
 utils.show_learning_curve(train_loss_list, val_loss_list, train_accuracy_list, val_accuracy_list, NUM_OF_EPOCHS,
                           title=TEST_NAME)
-
-
 
 # test
 # test_dataset = EmgDatasetMap(users_list=users_test_list, data_dir=utils.HDF_FILES_DIR, window_size=WINDOW_SIZE,
