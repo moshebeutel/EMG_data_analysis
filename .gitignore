@@ -127,6 +127,7 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
-
+.runs/
+.old_runs/
 *.hdf5
 *.log
