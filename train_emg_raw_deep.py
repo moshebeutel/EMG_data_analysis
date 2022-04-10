@@ -10,7 +10,7 @@ import utils
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from emg_pytorch_model_no_window import RawEmgConvnet
+from feature_emg_convnet import RawEmgConvnet
 import torch.nn as nn
 import torch.optim as optim
 from tqdm import tqdm
