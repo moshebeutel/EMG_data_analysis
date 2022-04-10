@@ -10,10 +10,9 @@ import utils
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
-from feature_emg_convnet import RawEmgConvnet
+from models.feature_emg_convnet import RawEmgConvnet
 import torch.nn as nn
 import torch.optim as optim
-from tqdm import tqdm
 
 sns.set()
 logger = utils.config_logger(os.path.basename(__file__)[:-3], level=logging.DEBUG)
