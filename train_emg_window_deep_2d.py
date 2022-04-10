@@ -1,6 +1,6 @@
 import pandas as pd
 from sklearn.metrics import confusion_matrix, classification_report
-from emg_pytorch_dataset import EmgDatasetMap
+from data.datasets.emg_pytorch_dataset import EmgDatasetMap
 from test_emg_window_deep_2d import test_window
 from torch.utils.data import DataLoader
 import torch

@@ -1,5 +1,5 @@
 from sklearn.metrics import confusion_matrix, classification_report
-from emg_pytorch_dataset import EmgDatasetMap
+from data.datasets.emg_pytorch_dataset import EmgDatasetMap
 from torch.utils.data import DataLoader
 import torch
 import torch.nn as nn
