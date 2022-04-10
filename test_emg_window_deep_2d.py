@@ -3,7 +3,7 @@ from emg_pytorch_dataset import EmgDatasetMap
 from torch.utils.data import DataLoader
 import torch
 import torch.nn as nn
-from emg_pytorch_model import RawEmgConvnet
+from models.emg_pytorch_model import RawEmgConvnet
 import utils
 import os
 import logging

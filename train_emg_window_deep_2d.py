@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from emg_pytorch_model import RawEmgConvnet
+from models.emg_pytorch_model import RawEmgConvnet
 from models.model3d import RawEmg3DConvnet
 from models.feature_emg_convnet import FeatureEmgConvnet
 from data.datasets.emg_feature_dataset import EmgFeatureDataset
