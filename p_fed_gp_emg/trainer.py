@@ -31,11 +31,11 @@ import wandb
 parser = argparse.ArgumentParser(description="Personalized Federated Learning")
 
 
-parser.add_argument("--putemg_folder", type=str, default='../Data-HDF5/')
-parser.add_argument("--result_folder", type=str, default='./shallow_learn_results/')
-parser.add_argument("--nf", type=str2bool, default=False)
-parser.add_argument("--nc", type=str2bool, default=False)
-
+parser.add_argument("--putemg_folder", type=str, default='../../putemg-downloader/Data-HDF5/')
+parser.add_argument("--result_folder", type=str, default='../shallow_learn_results/')
+parser.add_argument("--nf", type=str2bool, default=True)
+parser.add_argument("--nc", type=str2bool, default=True)
+#Moshe skip filter and shallow learn
 ##################################
 #       Optimization args        #
 ##################################
@@ -77,7 +77,7 @@ parser.add_argument("--exp-name", type=str, default='', help="suffix for exp nam
 parser.add_argument("--eval-every", type=int, default=200, help="eval every X selected steps")
 parser.add_argument("--save-path", type=str, default="./output/pFedGP", help="dir path for output file")
 parser.add_argument("--seed", type=int, default=42, help="seed value")
-parser.add_argument('--wandb', type=str2bool, default=True)
+parser.add_argument('--wandb', type=str2bool, default=False)
 
 args = parser.parse_args()
 
@@ -124,7 +124,12 @@ calculated_features_folder = os.path.join(result_folder, 'calculated_features')
 
 # list all hdf5 files in given input folder
 all_files = [f for f in sorted(glob.glob(os.path.join(putemg_folder, "*.hdf5")))]
-
+#Moshe take only gesture sequential for part of users
+user_trains = [f'emg_gestures-{user}-{traj}' for user in ['03', '04', '05', '06', '07'] for traj in ['sequential',
+                                                                                                     'repeats_short',
+                                                                                                     'repeats_long']]
+train_user_files = [f for f in all_files if any([a for a in user_trains if a in f])]
+all_files = train_user_files
 # if not skipped filter the input data and save to consequent output files
 if not args.nf:
     # create folder for filtered data
@@ -197,15 +202,16 @@ for r in records_filtered_by_subject:
 
 # create k-fold validation set, with 3 splits - for each experiment day 3 combination are generated
 # this results in 6 data combination for each subject
+# Moshe splits = 1 instead of 3
 splits_all = biolab_utilities.data_per_id_and_date(records_filtered_by_subject, n_splits=3)
 
 device = get_device(cuda=int(args.gpus) >= 0, gpus=args.gpus)
 
 # defines feature sets to be used in shallow learn
 feature_sets = {
-    "RMS": ["RMS"],
-    "Hudgins": ["MAV", "WL", "ZC", "SSC"],
-    "Du": ["IAV", "VAR", "WL", "ZC", "SSC", "WAMP"]
+    # "RMS": ["RMS"],
+    "Hudgins": ["MAV", "WL", "ZC", "SSC"]   # ,
+    # "Du": ["IAV", "VAR", "WL", "ZC", "SSC", "WAMP"]
 }
 
 # defines gestures to be used in shallow learn
