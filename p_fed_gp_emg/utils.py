@@ -30,10 +30,10 @@ def set_seed(seed, cudnn_enabled=True):
     torch.backends.cudnn.deterministic = True
 
 
-def set_logger():
+def set_logger(level = logging.INFO):
     logging.basicConfig(
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        level=logging.INFO
+        level=level
     )
 
 def get_device(cuda=True, gpus='0'):
@@ -212,7 +212,7 @@ def psd_safe_cholesky(A, upper=False, out=None, jitter=None):
             as 1e-6 (float) or 1e-8 (double)
     """
     try:
-        L = torch.cholesky(A, upper=upper, out=out)
+        L = torch.linalg.cholesky(A, upper=upper, out=out)
         return L
     except RuntimeError as e:
         isnan = torch.isnan(A)
