@@ -9,13 +9,14 @@ import torch.utils.data
 from tqdm import trange
 import copy
 
+# from models.feature_emg_convnet import FeatureEmgConvnet
+from models.model3d import RawEmg3DConvnet
 from pFedGP.Learner import pFedGPFullLearner
 
 from backbone import CNNTarget
-from utils import get_device, set_logger, set_seed, detach_to_numpy, calc_metrics, str2bool
+from p_fed_gp_emg.utils import get_device, set_logger, set_seed, detach_to_numpy, calc_metrics, str2bool
 
 import os
-import sys
 import glob
 import pickle
 import re
@@ -35,11 +36,11 @@ parser.add_argument("--putemg_folder", type=str, default='../../putemg-downloade
 parser.add_argument("--result_folder", type=str, default='../shallow_learn_results/')
 parser.add_argument("--nf", type=str2bool, default=True)
 parser.add_argument("--nc", type=str2bool, default=True)
-#Moshe skip filter and shallow learn
+
 ##################################
 #       Optimization args        #
 ##################################
-parser.add_argument("--num-steps", type=int, default=200)
+parser.add_argument("--num-steps", type=int, default=3)
 parser.add_argument("--optimizer", type=str, default='sgd', choices=['adam', 'sgd'], help="learning rate")
 parser.add_argument("--batch-size", type=int, default=512)
 parser.add_argument("--inner-steps", type=int, default=1, help="number of inner steps")
@@ -74,23 +75,34 @@ parser.add_argument('--outputscale-increase', type=str, default='constant',
 parser.add_argument("--num-workers", type=int, default=4, help="number of workers")
 parser.add_argument("--gpus", type=str, default='0', help="gpu device ID")
 parser.add_argument("--exp-name", type=str, default='', help="suffix for exp name")
-parser.add_argument("--eval-every", type=int, default=200, help="eval every X selected steps")
+parser.add_argument("--eval-every", type=int, default=1, help="eval every X selected steps")
 parser.add_argument("--save-path", type=str, default="./output/pFedGP", help="dir path for output file")
 parser.add_argument("--seed", type=int, default=42, help="seed value")
-parser.add_argument('--wandb', type=str2bool, default=False)
+parser.add_argument('--wandb', type=str2bool, default=True)
+##########################################################
+#       Test Convnet Backbone args                       #
+##########################################################
+parser.add_argument("--backbone", type=str, choices=['simple', 'conv3d'], default='conv3d',
+                    help="Type of backbone")
+parser.add_argument("--backbone-output", type=int, default=64, help="backbone output size")
+parser.add_argument("--depthwise-multiplier", type=int, default=32, help="Depthwise multiplier")
+parser.add_argument("--window_size", type=int, default=1, help="window size for 3d backbone")
 
 args = parser.parse_args()
 
-set_logger()
+set_logger(level=logging.INFO)
+logging.info(f'Logger set. Log level  = {logging.getLevelName(logging.getLogger().getEffectiveLevel())}')
+logging.debug(f'window size = {args.window_size}')
 set_seed(args.seed)
 
-exp_name = f'putEMG_pFedGP-Full_seed_{args.seed}_wd_{args.wd}_' \
+run_num = 2
+exp_name = f'{args.backbone}_putEMG_pFedGP-Full_run_seed_{args.seed}_optim_{args.optimizer}_wd_{args.wd}_' \
            f'lr_{args.lr}_num_steps_{args.num_steps}_inner_steps_{args.inner_steps}_' \
-           f'objective_{args.objective}_predict_ratio_{args.predict_ratio}'
+           f'objective_{args.objective}_predict_ratio_{args.predict_ratio}_output_dim_{args.backbone_output}_depthwise-multiplier_{args.depthwise_multiplier}'
 
 # Weights & Biases
 if args.wandb:
-    wandb.init(project="gp-pfl", entity="aviv_and_idan", name=exp_name)
+    wandb.init(project="emg_gp_moshe", entity="emg_diff_priv", name=f'rerun_{args.backbone}_putEMG_pFedGP-Full_run_output_lr_{args.lr}')
     wandb.config.update(args)
 
 #
@@ -199,18 +211,23 @@ for r in records_filtered_by_subject:
     filename = os.path.splitext(r.path)[0]
     dfs[r] = pd.DataFrame(pd.read_hdf(os.path.join(calculated_features_folder,
                                                    filename + '_filtered_features.hdf5')))
+# dfs1: Dict[biolab_utilities.Record, pd.DataFrame] = {}
+# for file in all_files:
+#     basename = os.path.basename(file)
+#     filename = os.path.splitext(basename)[0]
+#     print("Reading raw for input file: ", filename)
+#     dfs1[basename]= pd.read_hdf(file)
 
 # create k-fold validation set, with 3 splits - for each experiment day 3 combination are generated
 # this results in 6 data combination for each subject
-# Moshe splits = 1 instead of 3
 splits_all = biolab_utilities.data_per_id_and_date(records_filtered_by_subject, n_splits=3)
 
 device = get_device(cuda=int(args.gpus) >= 0, gpus=args.gpus)
 
 # defines feature sets to be used in shallow learn
 feature_sets = {
-    # "RMS": ["RMS"],
-    "Hudgins": ["MAV", "WL", "ZC", "SSC"]   # ,
+    "RMS": ["RMS"],
+    # "Hudgins": ["MAV", "WL", "ZC", "SSC"],
     # "Du": ["IAV", "VAR", "WL", "ZC", "SSC", "WAMP"]
 }
 
@@ -226,7 +243,7 @@ gestures = {
     7: "Pinch small"
 }
 
-num_classes = 8
+num_classes = args.backbone_output
 classes_per_client = 8
 num_clients = len(splits_all.values())
 
@@ -234,7 +251,7 @@ num_clients = len(splits_all.values())
 channel_range = {
     "24chn": {"begin": 1, "end": 24},
     # "8chn_1band": {"begin": 1, "end": 8},
-    "8chn_2band": {"begin": 9, "end": 16},
+    # "8chn_2band": {"begin": 9, "end": 16},
     # "8chn_3band": {"begin": 17, "end": 24}
 }
 
@@ -394,7 +411,14 @@ for ch_range_name, ch_range in channel_range.items():
         gp_counter = 0
 
         # NN
-        net = CNNTarget(n_features=n_features)
+        net = CNNTarget(n_features=n_features) if args.backbone == 'simple' else \
+            RawEmg3DConvnet(number_of_classes=num_classes,
+                            window_size=args.window_size,
+                            depthwise_multiplier=args.depthwise_multiplier,
+                            logger=logging.getLogger()).to(
+                device)
+            # FeatureEmgConvnet(number_of_class=num_classes, channels=1).to(device)
+
         net = net.to(device)
 
         GPs = torch.nn.ModuleList([])
@@ -517,7 +541,8 @@ for ch_range_name, ch_range in channel_range.items():
             # update new parameters
             net.load_state_dict(params)
 
-            if (step + 1) == args.num_steps:
+            # if (step + 1) == args.num_steps:
+            if (step % args.eval_every) == (args.eval_every - 1) or (step + 1) == args.num_steps:
                 test_results, labels_vs_preds_val, step_results = eval_model(net, GPs, feature_set_name, features)
                 test_avg_loss, test_avg_acc = calc_metrics(test_results)
                 logging.info(f"Step: {step + 1}, Test Loss: {test_avg_loss:.4f},  Test Acc: {test_avg_acc:.4f}")
@@ -533,9 +558,11 @@ for ch_range_name, ch_range in channel_range.items():
                         'test_avg_acc': test_avg_acc,
                     }
                 )
+                wandb.watch(net)
 
     # for each channel configuration dump classification results to file
     file = os.path.join(result_folder, "classification_result_" + exp_name + "_" + ch_range_name + ".bin")
     pickle.dump(output, open(file, "wb"))
     if args.wandb:
         wandb.save(file)
+
