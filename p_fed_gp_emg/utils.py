@@ -30,10 +30,10 @@ def set_seed(seed, cudnn_enabled=True):
     torch.backends.cudnn.deterministic = True
 
 
-def set_logger():
+def set_logger(level = logging.INFO):
     logging.basicConfig(
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        level=logging.INFO
+        level=level
     )
 
 def get_device(cuda=True, gpus='0'):
@@ -288,5 +288,5 @@ def calc_metrics(results):
     total_correct = sum([val['correct'] for val in results.values()])
     total_samples = sum([val['total'] for val in results.values()])
     avg_loss = np.mean([val['loss'] for val in results.values()])
-    avg_acc = total_correct / total_samples
+    avg_acc = float(total_correct) / float(total_samples)
     return avg_loss, avg_acc

@@ -403,7 +403,7 @@ def prepare_data(dfs: Dict[Record, pd.DataFrame], s: Dict[str, List[Record]], fe
         columns_input = []
         for r in v:
             columns_input = list(filter(column_regex.match, list(dfs[r])))
-            df_temp = df_temp.append(dfs[r][columns_input + metadata])
+            df_temp = pd.concat([df_temp, dfs[r][columns_input + metadata]])
 
         df_temp["original_time"] = df_temp.index
 

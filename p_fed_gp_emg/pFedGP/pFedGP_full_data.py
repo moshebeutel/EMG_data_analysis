@@ -1,3 +1,4 @@
+import logging
 from collections import namedtuple
 import pypolyagamma
 from gpytorch.utils.quadrature import GaussHermiteQuadrature1D
@@ -68,6 +69,13 @@ class pFedGPFull(nn.Module):
             Y_test = y_c[perm][:k_fold] if i == 0 else torch.cat((Y_test, y_c[perm][:k_fold]), dim=0)
             X_train = X_c[perm][k_fold:] if i == 0 else torch.cat((X_train, X_c[perm][k_fold:]), dim=0)
             Y_train = y_c[perm][k_fold:] if i == 0 else torch.cat((Y_train, y_c[perm][k_fold:]), dim=0)
+        # if Y_test.shape[0]==0:
+        #     X_test = X_train[-1].clone().detach()
+        #     Y_test = Y_train[-1].clone().detach().reshape(1)
+        #     X_train=X_train[:-1]
+        #     Y_train=Y_train[:-1]
+        #     logging.debug(f'X_train {X_train.shape}, X_test {X_test.shape}, Y_train {Y_train.shape}, Y_test {Y_test.shape}')
+
         return X_train, X_test, Y_train, Y_test
 
     def forward_mll(self, X, Y, to_print=True):
@@ -90,6 +98,10 @@ class pFedGPFull(nn.Module):
     def forward_predictive(self, X, Y, to_print=True):
 
         X_train, X_test, Y_train, Y_test = self.train_test_split(X, Y)
+        if X_train.shape[0] < 3 or Y_test.shape[0] == 0 or\
+                Y_test.shape[0] != X_test.shape[0] or\
+                Y_train.shape[0] != X_train.shape[0]:
+            return 0
 
         self.num_steps = self.num_steps_train
         self.num_draws = self.num_draws_train
@@ -238,6 +250,17 @@ class pFedGPFull(nn.Module):
         mu_tilde = sigma_tilde.matmul(kappa.unsqueeze(-1) + Kinv_mu).squeeze(-1)
 
         L_tilde = psd_safe_cholesky(sigma_tilde)
+        # logging.debug(f'omega {omega.shape}')
+        # logging.debug(f'kappa {kappa.shape}')
+        # logging.debug(f'Kinv_mu {Kinv_mu.shape}')
+        # logging.debug(f'Kinv {Kinv.shape}')
+        # logging.debug(f'Ω_inv {Ω_inv.shape}')
+        # logging.debug(f'L_noisy {L_noisy.shape}')
+        # logging.debug(f'Ω_inv {Ω_inv.shape}')
+        # logging.debug(f'sigma_tilde {sigma_tilde.shape}')
+        # logging.debug(f'model_state {model_state}')
+        logging.debug(f'mu_tilde {mu_tilde.shape}')
+        logging.debug(f'L_tilde {L_tilde.shape}')
         fs = torch.distributions.MultivariateNormal(mu_tilde, scale_tril=L_tilde).rsample()
         return fs
 
@@ -265,6 +288,8 @@ class pFedGPFull(nn.Module):
         # when omega is zero kappa should be zero as well
         z = kappa / omega
         L_z = psd_safe_cholesky(z_Sigma)
+        logging.debug(f'z_mu {z_mu.shape}')
+        logging.debug(f'L_z {L_z.shape}')
         p_y = torch.distributions.MultivariateNormal(z_mu, scale_tril=L_z)
 
         mll = p_y.log_prob(z) \
@@ -312,6 +337,10 @@ class pFedGPFull(nn.Module):
                                     matmul(torch.cholesky_solve(K_s, L_noisy)), dim1=1, dim2=2)
         Sigma_pred = torch.diag_embed(Sigma_pred)  # [ND, M, M]
         L_s = psd_safe_cholesky(Sigma_pred)
+        logging.debug(f'mu_pred {mu_pred.shape}')
+        logging.debug(f'L_s {L_s.shape}')
+        if(mu_pred.shape[-1] == 0):
+            print()
         dist = torch.distributions.MultivariateNormal(mu_pred, scale_tril=L_s)
         return dist
 
@@ -614,6 +643,8 @@ class pFedGPFullBound(pFedGPFull):
         mu_tilde = sigma_tilde.matmul(kappa.unsqueeze(-1) + Kinv_mu).squeeze(-1)
 
         L_tilde = psd_safe_cholesky(sigma_tilde)
+        logging.debug(f'mu_tilde {mu_tilde.shape}')
+        logging.debug(f'L_tilde {L_tilde.shape}')
         fs = torch.distributions.MultivariateNormal(mu_tilde, scale_tril=L_tilde)
         return fs
 

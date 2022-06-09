@@ -8,11 +8,13 @@ import torch
 import torch.utils.data
 from tqdm import trange
 import copy
-
+# from models.feature_emg_convnet import FeatureEmgConvnet
+import utils
+from models.model3d import RawEmg3DConvnet
 from pFedGP.Learner import pFedGPFullLearner
 
 from backbone import CNNTarget
-from utils import get_device, set_logger, set_seed, detach_to_numpy, calc_metrics, str2bool
+from p_fed_gp_emg.utils import get_device, set_logger, set_seed, detach_to_numpy, calc_metrics, str2bool
 
 import os
 import sys
@@ -30,21 +32,23 @@ import wandb
 
 parser = argparse.ArgumentParser(description="Personalized Federated Learning")
 
-
-parser.add_argument("--putemg_folder", type=str, default='../Data-HDF5/')
-parser.add_argument("--result_folder", type=str, default='./shallow_learn_results/')
-parser.add_argument("--nf", type=str2bool, default=False)
-parser.add_argument("--nc", type=str2bool, default=False)
+parser.add_argument("--raw", type=str2bool, default=True, help="Work on raw data or preprocessed features")
+parser.add_argument("--putemg_feature_folder", type=str, default='../features-dataframes')
+parser.add_argument("--putemg_raw_folder", type=str, default='../../putemg-downloader/Data-HDF5/')
+parser.add_argument("--result_folder", type=str, default='../wandb/results')
+# parser.add_argument("--result_folder", type=str, default='../shallow_learn_results/')
+parser.add_argument("--nf", type=str2bool, default=True)
+parser.add_argument("--nc", type=str2bool, default=True)
 
 ##################################
 #       Optimization args        #
 ##################################
-parser.add_argument("--num-steps", type=int, default=200)
-parser.add_argument("--optimizer", type=str, default='sgd', choices=['adam', 'sgd'], help="learning rate")
-parser.add_argument("--batch-size", type=int, default=512)
+parser.add_argument("--num-steps", type=int, default=400)
+parser.add_argument("--optimizer", type=str, default='sgd', choices=['adam', 'sgd'])
+parser.add_argument("--batch-size", type=int, default=8)
 parser.add_argument("--inner-steps", type=int, default=1, help="number of inner steps")
 parser.add_argument("--num-client-agg", type=int, default=5, help="number of kernels")
-parser.add_argument("--lr", type=float, default=1e-2, help="learning rate")
+parser.add_argument("--lr", type=float, default=1e-1, help="learning rate")
 parser.add_argument("--wd", type=float, default=1e-3, help="weight decay")
 
 ################################
@@ -71,26 +75,43 @@ parser.add_argument('--outputscale-increase', type=str, default='constant',
 #############################
 #       General args        #
 #############################
-parser.add_argument("--num-workers", type=int, default=4, help="number of workers")
+parser.add_argument("--num-workers", type=int, default=1, help="number of workers")
 parser.add_argument("--gpus", type=str, default='0', help="gpu device ID")
 parser.add_argument("--exp-name", type=str, default='', help="suffix for exp name")
-parser.add_argument("--eval-every", type=int, default=200, help="eval every X selected steps")
+parser.add_argument("--eval-every", type=int, default=10, help="eval every X selected steps")
 parser.add_argument("--save-path", type=str, default="./output/pFedGP", help="dir path for output file")
 parser.add_argument("--seed", type=int, default=42, help="seed value")
 parser.add_argument('--wandb', type=str2bool, default=True)
+##########################################################
+#       Test Convnet Backbone args                       #
+##########################################################
+parser.add_argument("--backbone", type=str, choices=['simple', 'conv3d'], default='simple',
+                    help="Type of backbone")
+parser.add_argument("--backbone-output", type=int, default=64, help="backbone output size")
+parser.add_argument("--depthwise-multiplier", type=int, default=32, help="Depthwise multiplier")
+# parser.add_argument("--window_size", type=int, default=1, help="window size for 3d backbone")
+parser.add_argument("--window_size", type=int, default=260, help="window size for 3d backbone")
+parser.add_argument('--raw-every', type=int, default=50, help="take every n-th raw reading ")
 
 args = parser.parse_args()
 
-set_logger()
+set_logger(level=logging.INFO)
+logging.info(f'Logger set. Log level  = {logging.getLevelName(logging.getLogger().getEffectiveLevel())}')
+logging.debug(f'window size = {args.window_size}')
 set_seed(args.seed)
 
-exp_name = f'putEMG_pFedGP-Full_seed_{args.seed}_wd_{args.wd}_' \
+run_num = 1
+exp_name = f'SIMPLE_BATCH_SIZE_{args.batch_size}_RAW_WIND_{args.backbone}_putEMG_pFedGP-Full_run_seed_{args.seed}_optim_{args.optimizer}_wd_{args.wd}_' \
            f'lr_{args.lr}_num_steps_{args.num_steps}_inner_steps_{args.inner_steps}_' \
-           f'objective_{args.objective}_predict_ratio_{args.predict_ratio}'
+           f'objective_{args.objective}_predict_ratio_{args.predict_ratio}_output_dim_{args.backbone_output}_depthwise-multiplier_{args.depthwise_multiplier}'
+# exp_name = f'RAW_EVERY_{args.raw_every}_AVG_POOL_BATCH_SIZE_{args.batch_size}_RAW_WIND_{args.backbone}_putEMG_pFedGP-Full_run_seed_{args.seed}_optim_{args.optimizer}_wd_{args.wd}_' \
+#            f'lr_{args.lr}_num_steps_{args.num_steps}_inner_steps_{args.inner_steps}_' \
+#            f'objective_{args.objective}_predict_ratio_{args.predict_ratio}_output_dim_{args.backbone_output}_depthwise-multiplier_{args.depthwise_multiplier}'
 
 # Weights & Biases
 if args.wandb:
-    wandb.init(project="gp-pfl", entity="aviv_and_idan", name=exp_name)
+    wandb.init(project="emg_gp_moshe", entity="emg_diff_priv", name=f'SIMPLE_BATCH_SIZE_{args.batch_size}_RAW_WIND_{args.backbone}_putEMG_pFedGP-Full_run_output_lr_{args.lr}')
+    # wandb.init(project="emg_gp_moshe", entity="emg_diff_priv", name=f'RAW_EVERY_{args.raw_every}_AVG_POOL_BATCH_SIZE_{args.batch_size}_RAW_WIND_{args.backbone}_putEMG_pFedGP-Full_run_output_lr_{args.lr}')
     wandb.config.update(args)
 
 #
@@ -102,29 +123,28 @@ if args.wandb:
 # out_dir = save_experiment(args, None, return_out_dir=True, save_results=False)
 # logging.info(out_dir)
 
-putemg_folder = os.path.abspath(args.putemg_folder)
-result_folder = os.path.abspath(args.result_folder)
 
+putemg_folder = os.path.abspath(args.putemg_feature_folder) if not args.raw \
+    else os.path.abspath(args.putemg_raw_folder)
 if not os.path.isdir(putemg_folder):
     print('{:s} is not a valid folder'.format(putemg_folder))
     exit(1)
 
+
+result_folder = os.path.abspath(args.result_folder)
 if not os.path.isdir(result_folder):
     print('{:s} is not a valid folder'.format(result_folder))
     exit(1)
-
-#putemg_folder = os.path.abspath(sys.argv[1])
-
-if not os.path.isdir(putemg_folder):
-    print('{:s} is not a valid folder'.format(putemg_folder))
-    exit(1)
-
-filtered_data_folder = os.path.join(result_folder, 'filtered_data')
-calculated_features_folder = os.path.join(result_folder, 'calculated_features')
+if not args.raw:
+    filtered_data_folder = os.path.join(result_folder, 'filtered_data')
+    calculated_features_folder = os.path.join(result_folder, 'calculated_features')
 
 # list all hdf5 files in given input folder
 all_files = [f for f in sorted(glob.glob(os.path.join(putemg_folder, "*.hdf5")))]
-
+#Moshe take only gesture sequential for part of users
+user_trains = [f'emg_gestures-{user}-{traj}' for user in ['03', '04', '05', '07'] for traj in ['sequential','repeats_short']]
+train_user_files = [f for f in all_files if any([a for a in user_trains if a in f])]
+all_files = train_user_files
 # if not skipped filter the input data and save to consequent output files
 if not args.nf:
     # create folder for filtered data
@@ -180,9 +200,10 @@ else:
 
 # create list of records
 all_feature_records = [biolab_utilities.Record(os.path.basename(f)) for f in all_files]
-
+logging.debug(all_feature_records)
 # data can be additionally filtered based on subject id
 records_filtered_by_subject = biolab_utilities.record_filter(all_feature_records)
+logging.debug(records_filtered_by_subject)
 # records_filtered_by_subject = record_filter(all_feature_records,
 #                                             whitelists={"id": ["01", "02", "03", "04", "07"]})
 # records_filtered_by_subject = pu.record_filter(all_feature_records, whitelists={"id": ["01"]})
@@ -190,23 +211,26 @@ records_filtered_by_subject = biolab_utilities.record_filter(all_feature_records
 # load feature data to memory
 dfs: Dict[biolab_utilities.Record, pd.DataFrame] = {}
 for r in records_filtered_by_subject:
-    print("Reading features for input file: ", r)
+    logging.info(f"Reading dataframe input file: {r}")
     filename = os.path.splitext(r.path)[0]
-    dfs[r] = pd.DataFrame(pd.read_hdf(os.path.join(calculated_features_folder,
-                                                   filename + '_filtered_features.hdf5')))
-
+    fullname = os.path.join(calculated_features_folder,filename + '_filtered_features.hdf5') if not args.raw else os.path.join(putemg_folder,filename + '.hdf5')
+    df = pd.DataFrame(pd.read_hdf(fullname))
+    dfs[r] = df[::(args.raw_every)]
+    del df
+logging.debug(records_filtered_by_subject)
 # create k-fold validation set, with 3 splits - for each experiment day 3 combination are generated
 # this results in 6 data combination for each subject
 splits_all = biolab_utilities.data_per_id_and_date(records_filtered_by_subject, n_splits=3)
 
 device = get_device(cuda=int(args.gpus) >= 0, gpus=args.gpus)
-
+device='cpu'
+logging.info(f'device = {device}')
 # defines feature sets to be used in shallow learn
 feature_sets = {
     "RMS": ["RMS"],
-    "Hudgins": ["MAV", "WL", "ZC", "SSC"],
-    "Du": ["IAV", "VAR", "WL", "ZC", "SSC", "WAMP"]
-}
+    # "Hudgins": ["MAV", "WL", "ZC", "SSC"],
+    # "Du": ["IAV", "VAR", "WL", "ZC", "SSC", "WAMP"]
+} if not args.raw else {'EMG': ["EMG"]}
 
 # defines gestures to be used in shallow learn
 gestures = {
@@ -220,7 +244,7 @@ gestures = {
     7: "Pinch small"
 }
 
-num_classes = 8
+num_classes = args.backbone_output
 classes_per_client = 8
 num_clients = len(splits_all.values())
 
@@ -228,7 +252,7 @@ num_clients = len(splits_all.values())
 channel_range = {
     "24chn": {"begin": 1, "end": 24},
     # "8chn_1band": {"begin": 1, "end": 8},
-    "8chn_2band": {"begin": 9, "end": 16},
+    # "8chn_2band": {"begin": 9, "end": 16},
     # "8chn_3band": {"begin": 17, "end": 24}
 }
 
@@ -262,12 +286,33 @@ def eval_model(global_model, GPs, feature_set_name, features):
 
             # extract limited training x and y, only with chosen channel configuration
             train_x = torch.tensor(data["train"][cols].to_numpy(), dtype=torch.float32)
+            # logging.info(train_x.shape)
+            num_windows = train_x.shape[0] // args.window_size
+            train_x = train_x[:(num_windows * args.window_size), :].reshape(-1, args.window_size, n_features)
+            # logging.info(train_x.shape)
+
             train_y = torch.LongTensor(data["train"]["output_0"].to_numpy())
+            # logging.info(train_y.shape)
+            train_y = train_y[: (num_windows * args.window_size)]
+            # logging.info(train_y.shape)
+            train_y = train_y[::args.window_size]
+            # logging.info(train_y.shape)
 
             # # extract limited testing x and y, only with chosen channel configuration
             test_x = torch.tensor(data["test"][cols].to_numpy(), dtype=torch.float32)
+            # logging.info(train_x.shape)
+            num_windows = test_x.shape[0] // args.window_size
+            test_x = test_x[:(num_windows * args.window_size), :].reshape(-1, args.window_size, n_features)
+            # logging.info(train_x.shape)
             test_y_true = torch.LongTensor(data["test"]["output_0"].to_numpy())
-
+            # logging.info(train_y.shape)
+            test_y_true = test_y_true[: (num_windows * args.window_size)]
+            # logging.info(train_y.shape)
+            test_y_true = test_y_true[::args.window_size]
+            # logging.info(train_y.shape)
+            if test_x.shape[0] != test_y_true.shape[0]:
+                logging.warning(f"test_x.shape {test_x.shape} test_y_true.shape {test_y_true.shape}")
+                print()
             train_loader = torch.utils.data.DataLoader(
                 torch.utils.data.TensorDataset(train_x, train_y),
                 shuffle=False,
@@ -288,8 +333,14 @@ def eval_model(global_model, GPs, feature_set_name, features):
             client_data_labels = []
             client_data_preds = []
 
+            invalid_batch_count = 0
             for batch_count, batch in enumerate(test_loader):
                 img, label = tuple(t.to(device) for t in batch)
+                if set(label.tolist()) & set(label_map.keys()) != set(label.tolist()):
+                    logging.warning(f'Not all labels in label_map label {set(label.tolist())} label_map {set(label_map.keys())}')
+                    invalid_batch_count += 1
+                    continue
+
                 Y_test = torch.tensor([label_map[l.item()] for l in label], dtype=label.dtype,
                                              device=label.device)
 
@@ -319,8 +370,8 @@ def eval_model(global_model, GPs, feature_set_name, features):
 
         # erase tree (no need to save it)
         GPs[client_id].tree = None
-
-        results[client_id]['loss'] = running_loss / (batch_count + 1)
+        batch_count -= invalid_batch_count
+        results[client_id]['loss'] = running_loss / float(batch_count + 1)
         results[client_id]['correct'] = running_correct
         results[client_id]['total'] = running_samples
 
@@ -342,6 +393,7 @@ def build_tree(net, client_id, loader):
     Build GP tree per client
     :return: List of GPs
     """
+
     for k, batch in enumerate(loader):
         batch = (t.to(device) for t in batch)
         train_data, clf_labels = batch
@@ -380,15 +432,21 @@ for ch_range_name, ch_range in channel_range.items():
         logging.info("======================== " + feature_set_name + " =======================")
 
         if ch_range_name == '24chn':
-            n_features = 24 if feature_set_name == "RMS" else 144 if feature_set_name == "Du" else 96  # "Hudgins"
+            n_features = 24 if feature_set_name in ["RMS", "EMG"]  else 144 if feature_set_name == "Du" else 96  # "Hudgins"
         else:  # 8chn_2band
-            n_features = 8 if feature_set_name == "RMS" else 48 if feature_set_name == "Du" else 32  # "Hudgins"
+            n_features = 8 if feature_set_name in ["RMS", "EMG"]  else 48 if feature_set_name == "Du" else 32  # "Hudgins"
 
         clients = splits_all
         gp_counter = 0
 
         # NN
-        net = CNNTarget(n_features=n_features)
+        net = CNNTarget(n_features=n_features) if args.backbone == 'simple' else \
+            RawEmg3DConvnet(number_of_classes=num_classes,
+                            window_size=args.window_size,
+                            depthwise_multiplier=args.depthwise_multiplier,
+                            logger=logging.getLogger())
+            # FeatureEmgConvnet(number_of_class=num_classes, channels=1).to(device)
+
         net = net.to(device)
 
         GPs = torch.nn.ModuleList([])
@@ -444,6 +502,8 @@ for ch_range_name, ch_range in channel_range.items():
                     # this is also where gesture transitions are deleted from training and test set
                     # only active part of gesture performance remains
                     data = biolab_utilities.prepare_data(dfs, subject_data, features, list(gestures.keys()))
+                    # for df in dfs.values():
+                    #     df.drop(utils.COLS_TO_DROP, axis=1, inplace=True)
 
                     # list columns containing only feature data
                     regex = re.compile(r'input_[0-9]+_[A-Z]+_[0-9]+')
@@ -454,7 +514,17 @@ for ch_range_name, ch_range in channel_range.items():
 
                     # extract limited training x and y, only with chosen channel configuration
                     train_x = torch.tensor(data["train"][cols].to_numpy(), dtype=torch.float32)
+                    # logging.info(train_x.shape)
+                    num_windows=train_x.shape[0] // args.window_size
+                    train_x = train_x[:(num_windows*args.window_size),:].reshape(-1,args.window_size,n_features)
+                    # logging.info(train_x.shape)
+
                     train_y = torch.LongTensor(data["train"]["output_0"].to_numpy())
+                    # logging.info(train_y.shape)
+                    train_y=train_y[: (num_windows*args.window_size)]
+                    # logging.info(train_y.shape)
+                    train_y = train_y[::args.window_size]
+                    # logging.info(train_y.shape)
 
                     train_loader = torch.utils.data.DataLoader(
                         torch.utils.data.TensorDataset(train_x, train_y),
@@ -462,7 +532,7 @@ for ch_range_name, ch_range in channel_range.items():
                         batch_size=args.batch_size,
                         num_workers=args.num_workers
                     )
-
+                    logging.debug(f'len(train_loader){len(train_loader)}')
                     # build tree at each step
                     GPs[client_id], label_map, _, __ = build_tree(curr_global_net, client_id, train_loader)
                     GPs[client_id].train()
@@ -482,7 +552,10 @@ for ch_range_name, ch_range in channel_range.items():
 
                         offset_labels = torch.tensor([label_map[l.item()] for l in Y], dtype=Y.dtype,
                                                      device=Y.device)
-
+                        logging.debug(f'X.shape = {X.shape}')
+                        logging.debug(f'offset_labels.shape = {offset_labels.shape}')
+                        logging.debug(f'X = {X}')
+                        logging.debug(f'offset_labels= {offset_labels}')
                         loss = GPs[client_id](X, offset_labels, to_print=to_print)
                         loss *= args.loss_scaler
 
@@ -511,7 +584,8 @@ for ch_range_name, ch_range in channel_range.items():
             # update new parameters
             net.load_state_dict(params)
 
-            if (step + 1) == args.num_steps:
+            # if (step + 1) == args.num_steps:
+            if (step % args.eval_every) == (args.eval_every - 1) or (step + 1) == args.num_steps:
                 test_results, labels_vs_preds_val, step_results = eval_model(net, GPs, feature_set_name, features)
                 test_avg_loss, test_avg_acc = calc_metrics(test_results)
                 logging.info(f"Step: {step + 1}, Test Loss: {test_avg_loss:.4f},  Test Acc: {test_avg_acc:.4f}")
