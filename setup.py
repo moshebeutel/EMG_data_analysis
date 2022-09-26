@@ -32,7 +32,7 @@ setup(
     url='',  # Optional
     author='',  # Optional
     author_email='',  # Optional
-    packages=['models', 'p_fed_gp_emg', 'data', 'biolab_utilities'],
+    packages=['p_fed_gp_emg', 'p_fed_gp_emg.biolab_utilities', 'p_fed_gp_emg.pyeeg',  'p_fed_gp_emg',  'models', 'models.modules', 'data', 'data.datasets', 'data.transform', 'biolab_utilities'],
     python_requires='>=3.7',
     install_requires=requirements()  # Optional
 )
