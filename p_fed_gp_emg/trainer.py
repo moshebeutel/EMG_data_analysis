@@ -8,8 +8,8 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.utils.data
-from opacus import PrivacyEngine
-from opacus.data_loader import DPDataLoader
+# from opacus import PrivacyEngine
+# from opacus.data_loader import DPDataLoader
 from tqdm import trange
 import copy
 # from models.feature_emg_convnet import FeatureEmgConvnet
@@ -64,7 +64,7 @@ parser.add_argument("--desired-epsilon", type=float, default=0.1)
 ################################
 #       GP args        #
 ################################
-parser.add_argument('--kernel-baseline-pth', type=str, default='saved_base_kernel.pth',
+parser.add_argument('--kernel-baseline-pth', type=str, default='',
                     choices=['', 'saved_base_kernel.pth', 'saved_kernel_ip_acc_0.6109170305676855.pth'],
                     help='saved trained kernel weights filename')
 parser.add_argument('--loss-scaler', default=1., type=float, help='multiplicative element to the loss function')
@@ -101,7 +101,7 @@ parser.add_argument("--eval-every", type=int, default=50, help="Eval model every
 parser.add_argument("--save-every", type=int, default=2, help="Save model every X selected evaluations")
 parser.add_argument("--save-path", type=str, default="./output/pFedGP", help="dir path for output file")
 parser.add_argument("--seed", type=int, default=42, help="seed value")
-parser.add_argument('--wandb', type=str2bool, default=True)
+parser.add_argument('--wandb', type=str2bool, default=False)
 ##########################################################
 #       Test Convnet Backbone args                       #
 ##########################################################
